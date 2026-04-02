@@ -120,7 +120,11 @@ All `feature('FLAG_NAME')` calls come from `bun:bundle` (a build-time API). In t
 
 ### 学习进度追踪
 
-当前进度记录在 memory 文件 `learning_progress.md` 中。每完成一个学习单元，更新该文件。新会话启动时读取该 memory 即可知道从哪里继续。
+当前进度记录在 memory 文件 `learning_progress.md` 中，采用**滚动窗口**机制：始终包含接下来 1-2 个学习单元的完整细节（学什么、对标源码、产出）。
+
+- **新会话启动**：只需读 `learning_progress.md`，即可精确知道下一步做什么，无需读完整 spec
+- **完成一个单元时**：更新 `learning_progress.md` — 将完成的单元移入"完成记录"，从 spec 文件提取下一个单元的细节填入"下一步"
+- **完整 spec**：`docs/superpowers/specs/2026-04-01-agent-architecture-learning-design.md`，仅在需要回顾全局或查找后续 Phase 细节时阅读
 
 ### Q&A 笔记保存规则
 
