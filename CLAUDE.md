@@ -113,3 +113,56 @@ All `feature('FLAG_NAME')` calls come from `bun:bundle` (a build-time API). In t
 - **React Compiler output** — Components have decompiled memoization boilerplate (`const $ = _c(N)`). This is normal.
 - **`bun:bundle` import** — In `src/main.tsx` and other files, `import { feature } from 'bun:bundle'` works at build time. At dev-time, the polyfill in `cli.tsx` provides it.
 - **`src/` path alias** — tsconfig maps `src/*` to `./src/*`. Imports like `import { ... } from 'src/utils/...'` are valid.
+
+## Learning Mode（学习模式协议）
+
+本仓库同时用于 agent 架构学习项目。完整学习计划见 `docs/superpowers/specs/2026-04-01-agent-architecture-learning-design.md`，但日常交互中**不要读那个文件**。进度追踪和笔记规范见下。
+
+### 学习进度追踪
+
+当前进度记录在 memory 文件 `learning_progress.md` 中。每完成一个学习单元，更新该文件。新会话启动时读取该 memory 即可知道从哪里继续。
+
+### Q&A 笔记保存规则
+
+当用户提出关于源码架构的问题并得到解答后，将 Q&A 保存到 `docs/learning/` 目录：
+
+**文件命名**: `{序号}-{关键词}.md`，如 `001-react-loop-core.md`
+
+**文件格式**:
+```markdown
+---
+id: "{三位数序号}"
+title: "简短标题"
+date: "YYYY-MM-DD"
+tags: [标签1, 标签2]
+source_files:
+  - src/对应文件:行号
+phase: "Phase X.Y"
+---
+
+## 问题
+用户的原始问题
+
+## 分析
+源码分析，包含关键代码片段和行号引用
+
+## 解答
+结论
+
+## 关联
+- 相关笔记链接（如有）
+```
+
+**索引文件**: 每次新增笔记后，追加一行到 `docs/learning/INDEX.md`：
+```
+- [001 - 标题](001-关键词.md) — 一句话摘要 [Phase X.Y] [标签]
+```
+
+**保存时机**: 当一个完整的 Q&A 回合结束（问题被充分解答）时保存。不要每句话都存，也不要攒到最后批量存。
+
+### 会话管理规则
+
+- **一次会话聚焦 1-2 个学习单元**，允许发散追问
+- **新会话时机**：当前 Phase 的所有单元完成、或对话明显变长变慢时，建议用户开新会话
+- **新会话启动动作**：读 memory 中的 `learning_progress.md` 获取进度，从下一个单元继续
+- **不要在对话中重复朗读学习计划**，只在用户问"接下来学什么"时简要提示当前 Phase 和下一个单元
