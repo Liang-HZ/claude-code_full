@@ -62,8 +62,8 @@
 
 | 单元 | 内容 | 对标 |
 |------|------|------|
-| 1.1 | 7 种 MessageType 与 Message 基础结构 | `src/types/message.ts#MessageType` |
-| 1.2 | 内容块类型（text, tool_use, tool_result, thinking） | `src/types/message.ts#Message` |
+| 1.1 | 消息类型分层与 stub 识别（`src/types/message.ts` 是 auto-generated stub，只做识别，不作为主实现锚点） | `src/utils/messages.ts#normalizeMessages`, `src/types/message.ts` |
+| 1.2 | 内容块类型在规范化链中的进入/筛选/保留方式（text, tool_use, tool_result, thinking） | `src/utils/messages.ts#normalizeMessagesForAPI` |
 | 1.3 | processUserInput 的输入预处理（slash 命令、附件、图片） | `src/utils/processUserInput/processUserInput.ts` |
 | 1.4 | normalizeMessagesForAPI — UI 消息 vs API 消息的分离边界 | `src/utils/messages.ts#normalizeMessagesForAPI` |
 
@@ -86,7 +86,7 @@
 
 | 单元 | 内容 | 对标 |
 |------|------|------|
-| 2.1 | cli.tsx polyfill 与 MACRO 系统（feature flag 全 false） | `src/entrypoints/cli.tsx` |
+| 2.1 | cli.tsx 启动薄层：env 修正 + `feature()` build-time gating + `MACRO` 常量内联 | `src/entrypoints/cli.tsx` |
 | 2.2 | Commander.js CLI 定义与模式分流（interactive/headless/pipe） | `src/main.tsx` |
 | 2.3 | init() 30 步初始化编排（并行预取、依赖排序、懒加载） | `src/entrypoints/init.ts#init` |
 | 2.4 | 分层配置系统（user → project → local → flag + policy → managed → remote managed → MDM） | `src/utils/config.ts`, `src/utils/settings/settings.ts#getInitialSettings` |
@@ -141,7 +141,7 @@
 | 4.2 | 流式事件处理链（message_start → content_block_start → delta → stop → message_delta） | `src/services/api/claude.ts` |
 | 4.3 | 部分消息累积（contentBlocks[] 索引追加，delta 拼接） | `src/services/api/claude.ts` |
 | 4.4 | 重试与错误恢复（529 过载 / 429 限流 / 401 认证刷新 / 连接错误） | `src/services/api/withRetry.ts` |
-| 4.5 | 流式空闲超时与停滞检测（180s 超时，30s 间隔告警） | `src/services/api/claude.ts` |
+| 4.5 | 流式空闲超时与停滞检测（默认 90s idle timeout，45s warning，30s stall detection） | `src/services/api/claude.ts` |
 
 **产出**：streaming 事件处理图 + delta 累积与恢复策略笔记
 
@@ -301,7 +301,7 @@ mini-claude/
 
 | 单元 | 内容 | 对标 |
 |------|------|------|
-| 9.1 | 权限模型（5 种模式：default, auto, plan, bypass, dontAsk） | `src/types/permissions.ts#PermissionMode` |
+| 9.1 | 权限模型（外部模式：default, acceptEdits, bypassPermissions, plan, dontAsk；internal 另含 gated `auto` / `bubble`） | `src/types/permissions.ts#PermissionMode` |
 | 9.2 | 权限规则（PermissionRule 格式 `Bash(npm install)`, 源追踪） | `src/types/permissions.ts#PermissionRule` |
 | 9.3 | 权限决策流程（rules → mode → hooks → classifier → interactive dialog） | `src/utils/permissions/permissions.ts#hasPermissionsToUseTool` |
 | 9.4 | ToolPermissionContext 不可变传递（DeepImmutable 包装） | `src/Tool.ts#ToolPermissionContext` |
@@ -431,7 +431,7 @@ mini-claude/
 | 14.2 | AsyncLocalStorage 上下文隔离（多后台 agent 同进程并发） | `src/utils/agentContext.ts` |
 | 14.3 | Subagent 上下文创建（MCP 继承、工具池继承、权限克隆、独立 abortController） | `src/tools/AgentTool/runAgent.ts` |
 | 14.4 | Fork Subagent（完整对话继承 + renderedSystemPrompt 缓存共享 + FORK_BOILERPLATE 防递归） | `src/tools/AgentTool/forkSubagent.ts` |
-| 14.5 | 后台 Agent（120s 自动转后台，LocalAgentTask 状态追踪，pendingMessages 队列） | `src/tasks/LocalAgentTask/` |
+| 14.5 | 后台 Agent（支持按 env / gate 控制的 auto-background，常见默认值 120s；LocalAgentTask 状态追踪，pendingMessages 队列） | `src/tasks/LocalAgentTask/`, `src/tools/AgentTool/AgentTool.tsx` |
 | 14.6 | Task 系统（LocalAgentTask vs RemoteAgentTask — 状态机、进度追踪） | `src/tasks/` |
 | 14.7 | Worktree 隔离（git worktree 创建，独立工作目录） | AgentTool 相关 |
 | 14.8 | Team/Swarm 协调（TeamFile 结构、subscription 模型、leader/member） | `src/utils/swarm/teamHelpers.ts` |
@@ -481,7 +481,7 @@ mini-claude/
 
 | 单元 | 内容 | 对标 |
 |------|------|------|
-| 16.1 | 自定义 Ink 框架（React reconciler + Yoga WASM 布局） | `src/ink/reconciler.ts` |
+| 16.1 | 自定义 Ink 框架（React reconciler + Yoga 布局适配层，底层为 TS 版 yoga） | `src/ink/reconciler.ts`, `src/ink/layout/yoga.ts`, `src/native-ts/yoga-layout/index.ts` |
 | 16.2 | REPL 组件（主循环、feature-gated 模块） | `src/screens/REPL.tsx` |
 | 16.3 | 消息渲染（虚拟滚动、内容块分类渲染、流式 markdown） | `src/components/Messages.tsx` |
 | 16.4 | PromptInput（多模式输入、自动补全、历史导航） | `src/components/PromptInput/PromptInput.tsx` |
