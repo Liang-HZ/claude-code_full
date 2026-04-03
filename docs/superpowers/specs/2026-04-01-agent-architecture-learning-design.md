@@ -1,344 +1,406 @@
-# Agent 架构深度学习计划 — 设计文档
+# Agent 架构深度学习计划 — 修订版
 
-## 愿景
+## 目标
 
-通过系统性研读 Claude Code 源码并从零构建一个对标其架构的 TypeScript agent（项目名 `mini-claude`），深度掌握业界顶级 agent 系统的核心设计模式，形成可迁移到任意语言/场景的 agent 架构能力。
+通过系统性研读当前仓库，并在理解主数据流之后再构建一个精简版 `mini-claude`，掌握 Claude Code 类 agent 系统的真实架构，而不是只复制其目录结构或类型表面。
 
-## 核心决策
+本修订版基于对当前代码库的再次核实，重点修正了以下问题：
 
-| 维度 | 决策 | 理由 |
-|------|------|------|
-| 学习方式 | 边学边造（镜像还原法） | 每个模块先读源码、再实现精简版，理解与实践严格对齐 |
-| 实现语言 | TypeScript (Bun) | 直接对标源码，零翻译损耗；掌握模式后可迁移到任意语言 |
-| 学习节奏 | 自底向上，模块化递进 | 每一层都是下一层的基石，最终拼成完整系统 |
-| 知识沉淀 | 原子化 Q&A 笔记（Zettelkasten） | 每条记录独立，支持发散式追问，后续可按需整理 |
-| 产出形态 | 可运行的 agent + 学习轨迹文档 | 实践出真知，对话过程本身也是知识资产 |
+1. 学习顺序不再从孤立的类型定义起步，而是从运行主链起步。
+2. 增加环境与验证前提闸门，避免在依赖未就绪时空谈“运行验证”。
+3. 降低对精确行号锚点的依赖，改为优先使用文件路径 + 函数名 / 类型名。
+4. 将 `mini-claude` 的镜像复刻后置，先理解数据流，再做实现。
+
+## 修订原则
+
+1. 主链优先：先理解 `输入 -> QueryEngine -> query -> tools -> API`。
+2. 先读后造：至少走通一条完整请求路径后，再开始 `mini-claude`。
+3. 锚点稳定：笔记引用优先使用 `文件 + 符号名`，避免绑定脆弱行号。
+4. 区分 stub 与完整实现：遇到自动生成的 stub，只做识别，不作为核心学习材料。
+5. 验证分级：阅读验证、静态验证、运行验证分开，不再假设每一步都能直接运行。
+6. 以数据流组织知识，而不是以静态模块名组织知识。
+
+## 当前仓库的主学习坐标
+
+当前仓库更适合作为以下五层结构来理解：
+
+1. 交互层：`src/main.tsx`、`src/screens/REPL.tsx`
+2. 编排层：`src/QueryEngine.ts`
+3. 核心循环层：`src/query.ts`
+4. 工具层：`src/tools.ts`、`src/Tool.ts`
+5. 通信层：`src/services/api/claude.ts`
+
+学习时应始终围绕这条主链回看支撑模块，而不是先拆散为类型、配置、状态、权限等孤立章节。
+
+## Phase 0: 环境与验证前提闸门
+
+在进入任何“运行验证”之前，必须先通过本闸门。
+
+### 0.1 目标
+
+确认当前工作区具备最基本的依赖与执行条件；若未通过，则本轮学习只做源码阅读与结构分析，不做运行类验证承诺。
+
+### 0.2 闸门清单
+
+必须至少核实以下项目：
+
+1. `node_modules` 已存在，或已完成 `bun install`
+2. `bun run dev --help` 可执行
+3. `bun test` 可执行
+4. 若涉及 API 链路验证，认证与密钥前提已明确
+
+### 0.3 闸门未通过时的规则
+
+如果闸门未通过：
+
+1. 允许源码阅读
+2. 允许架构图与消息流梳理
+3. 允许设计 `mini-claude` 的模块边界
+4. 不承诺运行验证
+5. 不把“跑不起来”误判为“理解错误”
 
 ## 学习笔记规范
 
 存储位置：`docs/learning/`
 
-每个 Q&A 文件格式：
+每篇笔记优先记录一个可独立回答的问题，而不是一段大而全的章节总结。
+
+建议 frontmatter：
+
 ```markdown
 ---
 id: "001"
-title: "简短标题"
-date: "2026-04-01"
-tags: [react-loop, streaming, tool-system]
-source_files:
-  - src/query.ts:307
-  - src/Tool.ts:158
+title: "为什么 QueryEngine 不是主循环本体"
+date: "2026-04-02"
+tags: [query-engine, message-lifecycle, orchestration]
+source_refs:
+  - src/QueryEngine.ts#submitMessage
+  - src/query.ts#query
+  - src/utils/processUserInput/processUserInput.ts#processUserInput
+verification:
+  level: "read" # read | static | runtime
 ---
-
-## 问题
-用户的原始问题
-
-## 分析
-深入的源码分析，包含代码片段
-
-## 解答
-结论性的回答
-
-## 关联
-相关笔记的链接
 ```
 
-索引文件：`docs/learning/INDEX.md`，按时间线排列，标注标签。
+说明：
 
-## 学习阶段总览
+1. `source_refs` 优先写 `文件#函数名` 或 `文件#类型名`
+2. 只有在某一段逻辑必须精确定位时才补行号
+3. `verification.level` 用于标记本条结论是阅读验证、静态验证还是运行验证
 
-共 18 个 Phase，90+ 个学习单元。每个阶段结构：
-1. **源码研读** — 一起读 Claude Code 对应模块的核心代码
-2. **提问与深入** — 任何问题即时记录为原子笔记
-3. **动手实现** — 在 `mini-claude` 中实现该模块的精简版
-4. **验证** — 运行验证，确认理解正确
+索引文件：`docs/learning/INDEX.md`
 
----
+## 修订后的学习顺序
 
-## Phase 1: 项目骨架与基础类型系统
+不再使用“18 个 Phase，90+ 单元”的固定切分，而采用更贴近主数据流的 10 步顺序。
 
-**对标源码**: `cli.tsx` polyfill/MACRO, `types/message.ts`
+### Step 1: 消息生命周期与主链边界
 
-| 单元 | 内容 | 对标文件 |
-|------|------|----------|
-| 1.1 | Bun + ESM + TS 项目搭建 | `cli.tsx`, `tsconfig.json`, `package.json` |
-| 1.2 | 消息类型体系（7 种 MessageType） | `types/message.ts:19` |
-| 1.3 | 内容块类型（text, tool_use, tool_result, thinking） | `types/message.ts:33-49` |
+核心问题：
 
-## Phase 2: 配置与初始化体系
+1. 用户输入是如何进入系统的？
+2. 消息在进入 `query()` 之前发生了哪些变形？
+3. 哪些消息给 UI 看，哪些消息给 API 看？
 
-**对标源码**: `utils/config.ts`, `bootstrap/state.ts`, `entrypoints/init.ts`
+优先文件：
 
-| 单元 | 内容 | 对标文件 |
-|------|------|----------|
-| 2.1 | 4 层配置系统（global → project → local → flag） | `utils/config.ts:76-148` |
-| 2.2 | 设置文件发现与合并 | `utils/settings/settings.ts:812-868` |
-| 2.3 | Bootstrap 状态单例 | `bootstrap/state.ts` |
-| 2.4 | 初始化编排（并行预取、依赖排序） | `entrypoints/init.ts:57-210` |
+1. `src/utils/processUserInput/processUserInput.ts`
+2. `src/utils/messages.ts`
+3. `src/QueryEngine.ts#submitMessage`
+4. `src/query.ts#query`
 
-## Phase 3: API 客户端与流式传输
+产出：
 
-**对标源码**: `services/api/claude.ts`, `services/api/client.ts`, `services/api/withRetry.ts`
+1. 一张“消息从输入到循环”的时序图
+2. 一篇解释 `normalizeMessagesForAPI` 边界的笔记
 
-| 单元 | 内容 | 对标文件 |
-|------|------|----------|
-| 3.1 | Anthropic SDK 集成 | `services/api/client.ts:88-250` |
-| 3.2 | 流式事件处理（5 种事件类型的完整链） | `services/api/claude.ts:1941-2170` |
-| 3.3 | 部分消息累积（delta 拼接） | `services/api/claude.ts:2054-2170` |
-| 3.4 | 重试与错误恢复（529/429/401） | `services/api/withRetry.ts:50-250` |
-| 3.5 | 流式空闲超时与停滞检测 | `services/api/claude.ts:1901-1930` |
-| 3.6 | Provider 抽象层 | `utils/model/providers.ts:6-14` |
+### Step 2: 入口与会话启动
 
-## Phase 4: 最小对话循环
+核心问题：
 
-**对标源码**: `QueryEngine.ts:submitMessage()`, `query.ts` 基础循环
+1. CLI 是如何启动并分流不同模式的？
+2. 初始化时哪些前置工作会先发生？
+3. 哪些逻辑在交互前，哪些逻辑在会话中？
 
-| 单元 | 内容 | 对标文件 |
-|------|------|----------|
-| 4.1 | 单轮对话 | `QueryEngine.ts:211-598` |
-| 4.2 | 多轮对话（历史累积） | `utils/messages.ts` |
-| 4.3 | Token 计数与估算 | `utils/tokens.ts` |
-| 4.4 | 消息规范化边界（UI vs API） | `utils/messages.ts:normalizeMessagesForAPI` |
+优先文件：
 
-## Phase 5: 工具系统 — 类型与注册
+1. `src/entrypoints/cli.tsx`
+2. `src/main.tsx`
+3. `src/entrypoints/init.ts`
 
-**对标源码**: `Tool.ts`, `tools.ts`
+产出：
 
-| 单元 | 内容 | 对标文件 |
-|------|------|----------|
-| 5.1 | Tool 接口设计（30+ 字段） | `Tool.ts:362-695` |
-| 5.2 | ToolUseContext 执行环境 | `Tool.ts:158-300` |
-| 5.3 | buildTool() 工厂函数 | `Tool.ts:783-792` |
-| 5.4 | Zod Schema 验证 | `tools/FileReadTool/FileReadTool.ts` |
-| 5.5 | 工具注册表与过滤 | `tools.ts:193-327` |
+1. 一张入口分发图
+2. 一篇解释 startup fast-path 的笔记
 
-## Phase 6: 工具系统 — 执行管线
+### Step 3: QueryEngine 作为编排层
 
-**对标源码**: `services/tools/toolExecution.ts`, `services/tools/toolOrchestration.ts`
+核心问题：
 
-| 单元 | 内容 | 对标文件 |
-|------|------|----------|
-| 6.1 | 完整执行管线（validate → hook → permission → call → result） | `services/tools/toolExecution.ts:337-1350` |
-| 6.2 | 实现 FileReadTool | `tools/FileReadTool/` |
-| 6.3 | 实现 BashTool | `tools/BashTool/` |
-| 6.4 | 实现 FileEditTool | `tools/FileEditTool/` |
-| 6.5 | 工具结果格式化与持久化 | `utils/toolResultStorage.ts` |
-| 6.6 | 工具 Prompt 注入 | `constants/prompts.ts:444-500` |
+1. `QueryEngine` 与 `query()` 的边界是什么？
+2. 为什么它不是主循环，但又是会话编排核心？
+3. 它如何管理状态、转录、权限拒绝与成本统计？
 
-## Phase 7: ReAct 核心循环
+优先文件：
 
-**对标源码**: `query.ts:307` 的 while(true)
+1. `src/QueryEngine.ts`
+2. `src/utils/queryContext.ts`
+3. `src/utils/sessionStorage.ts`
 
-| 单元 | 内容 | 对标文件 |
-|------|------|----------|
-| 7.1 | while(true) + needsFollowUp 模式 | `query.ts:307-1360` |
-| 7.2 | 循环状态结构 | `query.ts:241-304` |
-| 7.3 | 并发安全分区（partitionToolCalls） | `services/tools/toolOrchestration.ts:91-116` |
-| 7.4 | runTools() 批次执行 | `services/tools/toolOrchestration.ts:19-82` |
-| 7.5 | StreamingToolExecutor | `services/tools/StreamingToolExecutor.ts` |
-| 7.6 | 进度报告 | `services/tools/toolExecution.ts:onProgress` |
+产出：
 
-## Phase 8: 错误恢复与弹性
+1. 一篇解释 `submitMessage()` 职责边界的笔记
+2. 一张 QueryEngine 内部状态图
 
-**对标源码**: `query.ts` 的 6 种恢复机制
+### Step 4: API 客户端与流式传输
 
-| 单元 | 内容 | 对标文件 |
-|------|------|----------|
-| 8.1 | Prompt-too-long 恢复 | `query.ts:1068-1186` |
-| 8.2 | Max-output-tokens 恢复 | `query.ts:1188-1259` |
-| 8.3 | 模型降级（fallback） | `query.ts:896-957` |
-| 8.4 | 流式中断处理 | `query.ts:1014-1055` |
-| 8.5 | Stop Hooks | `query.ts:1270-1309` |
+核心问题：
 
-## Phase 9: 系统提示与上下文构建
+1. API 请求如何发出？
+2. 流式事件如何累积为 assistant 消息？
+3. 重试、fallback、流式错误恢复如何发生？
 
-**对标源码**: `constants/prompts.ts`, `utils/claudemd.ts`, `memdir/`, `outputStyles/`
+优先文件：
 
-| 单元 | 内容 | 对标文件 |
-|------|------|----------|
-| 9.1 | 系统提示组合架构（static + dynamic boundary） | `constants/prompts.ts:444-577` |
-| 9.2 | systemPromptSection 缓存机制 | `constants/systemPromptSections.ts` |
-| 9.3 | CLAUDE.md 发现层次（4 级 + @include） | `utils/claudemd.ts` |
-| 9.4 | Memory 目录系统 | `memdir/memdir.ts` |
-| 9.5 | 环境上下文注入 | `context.ts:116-189` |
-| 9.6 | 有效系统提示构建 | `utils/systemPrompt.ts:41-123` |
-| 9.7 | 输出样式模板系统 | `outputStyles/` |
+1. `src/services/api/claude.ts`
+2. `src/services/api/client.ts`
+3. `src/services/api/withRetry.ts`
 
-## Phase 10: 权限系统
+产出：
 
-**对标源码**: `types/permissions.ts`, `hooks/useCanUseTool.tsx`, `utils/permissions/`
+1. 一张 streaming 事件处理图
+2. 一篇解释 delta 累积与恢复策略的笔记
 
-| 单元 | 内容 | 对标文件 |
-|------|------|----------|
-| 10.1 | 权限模型设计（5 种模式） | `types/permissions.ts:15-38` |
-| 10.2 | 权限规则系统 | `types/permissions.ts:50-79` |
-| 10.3 | 权限决策流程 | `utils/permissions/permissions.ts:122-200` |
-| 10.4 | ToolPermissionContext 不可变传递 | `Tool.ts:123-148` |
-| 10.5 | Plan 模式限制 | `utils/permissions/permissionSetup.ts:1458-1510` |
-| 10.6 | 交互式权限对话 | `hooks/toolPermission/handlers/interactiveHandler.ts` |
-| 10.7 | 权限持久化 | `hooks/toolPermission/PermissionContext.ts:139-146` |
+### Step 5: 工具系统的抽象、注册与执行
 
-## Phase 11: 状态管理
+核心问题：
 
-**对标源码**: `state/AppStateStore.ts`, `state/store.ts`, `state/AppState.tsx`
+1. Tool 抽象的最小必要字段是什么？
+2. 工具是如何被注册与过滤的？
+3. 单个 tool use 从校验到结果返回会经过哪些阶段？
 
-| 单元 | 内容 | 对标文件 |
-|------|------|----------|
-| 11.1 | 发布-订阅 Store | `state/store.ts:1-35` |
-| 11.2 | AppState 双区结构 | `state/AppStateStore.ts:89-452` |
-| 11.3 | React 集成（useSyncExternalStore） | `state/AppState.tsx:142-163` |
-| 11.4 | 状态变更副作用 | `state/onChangeAppState.ts:43-171` |
-| 11.5 | 设置热重载 | `utils/settings/applySettingsChange.ts` |
+优先文件：
 
-## Phase 12: 上下文窗口管理（Compaction）
+1. `src/Tool.ts`
+2. `src/tools.ts`
+3. `src/services/tools/toolExecution.ts`
+4. `src/services/tools/toolOrchestration.ts`
 
-**对标源码**: `services/compact/`
+建议先选三个具代表性的工具精读：
 
-| 单元 | 内容 | 对标文件 |
-|------|------|----------|
-| 12.1 | Token 预算分配 | `utils/context.ts:8-222` |
-| 12.2 | Auto-compact 触发 | `services/compact/autoCompact.ts:72-351` |
-| 12.3 | Snip compaction | `query.ts:396-410` |
-| 12.4 | Microcompact | `services/compact/microCompact.ts` |
-| 12.5 | Full conversation compaction | `services/compact/compact.ts:389` |
-| 12.6 | Partial compaction | `services/compact/compact.ts:774` |
-| 12.7 | Post-compact 恢复 | `services/compact/compact.ts:1418-1571` |
-| 12.8 | Session memory compaction | `services/compact/sessionMemoryCompact.ts` |
+1. `FileReadTool`
+2. `BashTool`
+3. `FileEditTool`
 
-## Phase 13: 会话持久化
+产出：
 
-**对标源码**: `utils/sessionStorage.ts`, `utils/toolResultStorage.ts`
+1. 一张 tool execution pipeline 图
+2. 三篇工具样板分析笔记
 
-| 单元 | 内容 | 对标文件 |
-|------|------|----------|
-| 13.1 | JSONL transcript 存储 | `utils/sessionStorage.ts` |
-| 13.2 | Content replacement 系统 | `utils/toolResultStorage.ts` |
-| 13.3 | Resume 流程 | `utils/sessionRestore.ts` |
-| 13.4 | 文件历史快照 | `utils/fileHistory.ts:40-290` |
+### Step 6: ReAct 核心循环与工具编排
 
-## Phase 14: Hooks 系统
+核心问题：
 
-**对标源码**: `types/hooks.ts`, `utils/hooks.ts`
+1. `query.ts` 中 `while (true)` 的真正继续条件是什么？
+2. 工具批次如何切分？
+3. 流式输出与工具执行如何交织？
 
-| 单元 | 内容 | 对标文件 |
-|------|------|----------|
-| 14.1 | Hook 事件分类（15+ 事件类型） | `types/hooks.ts` |
-| 14.2 | 同步 vs 异步 Hook | `utils/hooks.ts` |
-| 14.3 | Hook 配置 | `utils/hooks/hooksConfigManager.ts` |
-| 14.4 | 权限决策 Hook | `utils/hooks.ts:PreToolUse` |
-| 14.5 | Session 生命周期 Hook | `utils/hooks.ts:SessionStart/End` |
+优先文件：
 
-## Phase 15: 多 Agent 系统
+1. `src/query.ts`
+2. `src/services/tools/StreamingToolExecutor.ts`
+3. `src/services/tools/toolOrchestration.ts`
 
-**对标源码**: `tools/AgentTool/`, `utils/agentContext.ts`, `tasks/`, `coordinator/`, `assistant/`, `remote/`
+产出：
 
-| 单元 | 内容 | 对标文件 |
-|------|------|----------|
-| 15.1 | AgentTool 设计 | `tools/AgentTool/AgentTool.tsx` |
-| 15.2 | AsyncLocalStorage 隔离 | `utils/agentContext.ts:1-179` |
-| 15.3 | Subagent 上下文创建 | `tools/AgentTool/runAgent.ts` |
-| 15.4 | Fork Subagent | `tools/AgentTool/forkSubagent.ts` |
-| 15.5 | 后台 Agent | `tasks/LocalAgentTask/` |
-| 15.6 | Task 系统 | `tasks/LocalAgentTask/LocalAgentTask.tsx` |
-| 15.7 | Worktree 隔离 | git worktree 相关 |
-| 15.8 | Team/Swarm 协调 | `utils/swarm/teamHelpers.ts` |
-| 15.9 | Coordinator 模式（leader/worker 任务分配） | `coordinator/` |
-| 15.10 | 会话发现与 Agent 路由 | `assistant/` |
-| 15.11 | WebSocket 远程会话通信 | `remote/` |
+1. 一张 ReAct 循环状态图
+2. 一篇解释 `needsFollowUp` 与继续条件的笔记
 
-## Phase 16: MCP 协议与扩展性
+### Step 7: 系统提示、上下文构建与记忆
 
-**对标源码**: `services/mcp/`, `skills/`, `plugins/`
+核心问题：
 
-| 单元 | 内容 | 对标文件 |
-|------|------|----------|
-| 16.1 | MCP 客户端（5 种传输） | `services/mcp/client.ts` |
-| 16.2 | 工具/资源桥接 | `services/mcp/utils.ts:32-150` |
-| 16.3 | 配置发现 | `services/mcp/config.ts` |
-| 16.4 | 连接池与动态加载 | `services/mcp/client.ts:ensureConnectedClient` |
-| 16.5 | 技能注册系统（bundled + MCP 技能发现） | `skills/` |
-| 16.6 | 插件注册与管理 | `plugins/` |
+1. 系统提示由哪些静态与动态部分构成？
+2. CLAUDE.md / memory / git status 如何注入？
+3. 这些上下文是如何为主循环服务的？
 
-## Phase 17: 终端 UI
+优先文件：
 
-**对标源码**: `screens/REPL.tsx`, `ink/`, `components/`, `keybindings/`, `native-ts/`, `context/`
+1. `src/constants/prompts.ts`
+2. `src/constants/systemPromptSections.ts`
+3. `src/context.ts`
+4. `src/utils/claudemd.ts`
+5. `src/memdir/memdir.ts`
 
-| 单元 | 内容 | 对标文件 |
-|------|------|----------|
-| 17.1 | 自定义 Ink 框架 | `ink/reconciler.ts` |
-| 17.2 | REPL 组件 | `screens/REPL.tsx` |
-| 17.3 | 消息渲染（虚拟滚动） | `components/Messages.tsx` |
-| 17.4 | PromptInput | `components/PromptInput/PromptInput.tsx` |
-| 17.5 | 权限对话 UI | `components/permissions/` |
-| 17.6 | 事件系统 | `ink/events/` |
-| 17.7 | 键绑定 schema 与匹配 | `keybindings/` |
-| 17.8 | Yoga 布局引擎 TS 实现 | `native-ts/` |
-| 17.9 | UI 层 React Context（prompt overlays, metrics） | `context/` |
+产出：
 
-## Phase 18: 高级模式
+1. 一张 system prompt 组装图
+2. 一篇解释 `getUserContext` / `getSystemContext` 的笔记
 
-| 单元 | 内容 | 对标文件 |
-|------|------|----------|
-| 18.1 | Query chain tracking | `Tool.ts:90-93` |
-| 18.2 | Token budget enforcement | `query/tokenBudget.ts` |
-| 18.3 | Deferred tool loading (ToolSearch) | `tools/ToolSearchTool/` |
-| 18.4 | Slash 命令系统 | `commands.ts`, `utils/slashCommandParsing.ts` |
-| 18.5 | Attribution 系统 | `utils/attribution.ts` |
-| 18.6 | Plan mode V2 | `utils/planModeV2.ts` |
+### Step 8: 权限、设置与运行边界
 
----
+核心问题：
 
-## 依赖关系图
+1. 权限模式与规则如何作用于工具执行？
+2. 配置和设置的真实来源有哪些？
+3. 企业管控、managed settings、remote managed settings 如何进入系统？
 
-```
-Phase 1 (类型) ─→ Phase 2 (配置) ─→ Phase 3 (API) ─→ Phase 4 (对话)
-                                                              ↓
-Phase 5 (工具类型) ─→ Phase 6 (工具执行) ─→ Phase 7 (ReAct) ─→ Phase 8 (恢复)
-                                                              ↓
-Phase 9 (上下文) ─→ Phase 10 (权限) ─→ Phase 11 (状态) ─→ Phase 12 (压缩)
-                                                              ↓
-Phase 13 (持久化) ─→ Phase 14 (Hooks) ─→ Phase 15 (多Agent) ─→ Phase 16 (MCP)
-                                                              ↓
-                                          Phase 17 (UI) ─→ Phase 18 (高级)
-```
+优先文件：
 
-## 项目结构
+1. `src/utils/permissions/permissions.ts`
+2. `src/utils/permissions/permissionSetup.ts`
+3. `src/utils/settings/settings.ts`
+4. `src/utils/config.ts`
+5. `src/state/onChangeAppState.ts`
 
-```
-claude-code_full/                    # 当前仓库（Claude Code 源码参考）
-├── docs/learning/                   # 原子化学习笔记
-│   ├── INDEX.md                     # 笔记索引
-│   ├── 001-xxx.md                   # 按序号命名的 Q&A 笔记
-│   └── ...
-├── docs/superpowers/specs/          # 设计文档
-│   └── 2026-04-01-agent-architecture-learning-design.md  # 本文件
-└── mini-claude/                     # 实践产出的 agent 项目
-    ├── package.json
-    ├── tsconfig.json
-    ├── src/
-    │   ├── types/                   # Phase 1: 消息类型
-    │   ├── config/                  # Phase 2: 配置系统
-    │   ├── api/                     # Phase 3: API 客户端
-    │   ├── engine/                  # Phase 4+7: 对话循环 & ReAct
-    │   ├── tools/                   # Phase 5+6: 工具系统
-    │   ├── context/                 # Phase 9: 上下文构建
-    │   ├── permissions/             # Phase 10: 权限系统
-    │   ├── state/                   # Phase 11: 状态管理
-    │   ├── compact/                 # Phase 12: Compaction
-    │   ├── persistence/             # Phase 13: 会话持久化
-    │   ├── hooks/                   # Phase 14: Hooks 系统
-    │   ├── agents/                  # Phase 15: 多 Agent
-    │   ├── mcp/                     # Phase 16: MCP + 扩展性
-    │   ├── skills/                  # Phase 16: 技能系统
-    │   ├── plugins/                 # Phase 16: 插件系统
-    │   └── ui/                      # Phase 17: 终端 UI
-    └── tests/                       # 各模块测试
-```
+注意：
 
-## 协作方式
+这一阶段不再把配置系统简化为“4 层配置”，而是明确区分：
 
-1. 每次会话聚焦 1-2 个学习单元
-2. 用户可随时发散追问，所有 Q&A 原子化记录
-3. 每个单元产出可运行代码 + 对应笔记
-4. 学习轨迹通过 git 版本控制
-5. 每个 Phase 完成后回顾整合
+1. user / project / local / flag
+2. policy / managed / remote managed
+3. MDM / HKCU / drop-ins
+
+产出：
+
+1. 一张 settings 来源合并图
+2. 一张 permission decision 流程图
+
+### Step 9: 上下文窗口管理、持久化与恢复
+
+核心问题：
+
+1. token 预算如何限制循环？
+2. compaction 为什么是系统核心而不是优化项？
+3. transcript、resume、content replacement 如何与主循环衔接？
+
+优先文件：
+
+1. `src/query/tokenBudget.ts`
+2. `src/services/compact/`
+3. `src/utils/sessionStorage.ts`
+4. `src/utils/sessionRestore.ts`
+5. `src/utils/toolResultStorage.ts`
+
+产出：
+
+1. 一张 compact 触发与恢复图
+2. 一篇解释 resume 如何重建会话状态的笔记
+
+### Step 10: 多 Agent、MCP、扩展与 UI
+
+核心问题：
+
+1. 子 agent、后台任务、worktree、swarm 如何叠加在主链之上？
+2. MCP / skills / plugins 如何扩展工具能力？
+3. REPL UI 如何承接这些状态？
+
+优先文件：
+
+1. `src/tools/AgentTool/`
+2. `src/tasks/`
+3. `src/coordinator/`
+4. `src/services/mcp/`
+5. `src/skills/`
+6. `src/plugins/`
+7. `src/screens/REPL.tsx`
+
+产出：
+
+1. 一张 agent / task / coordinator 关系图
+2. 一张 MCP / skill / plugin 扩展关系图
+
+## `mini-claude` 的实施策略
+
+`mini-claude` 不再与每一步强绑定，而采用延后实施策略。
+
+### 实施时机
+
+只有在完成 Step 1 到 Step 4 之后，才开始实现第一版 `mini-claude`。
+
+原因：
+
+1. 这时已经走通主链
+2. 已经知道 QueryEngine 与 query 的边界
+3. 已经知道工具系统与 API 链路的最小必要抽象
+
+### 第一版 `mini-claude` 只做什么
+
+第一版只实现最小主链：
+
+1. 非交互输入
+2. 消息对象与规范化边界
+3. 单轮 / 多轮 query loop
+4. 1 到 2 个基础工具
+5. 基础系统提示注入
+
+### 第一版 `mini-claude` 暂不做什么
+
+1. worktree
+2. swarm / coordinator
+3. remote sessions
+4. plugin marketplace
+5. 完整 compaction 家族
+6. 企业级 settings / policy 系统
+
+## 验证策略
+
+不再统一写成“每个阶段运行验证”，而采用三级验证：
+
+### Level 1: 阅读验证
+
+适用于：
+
+1. 入口结构
+2. 消息生命周期
+3. 系统提示构建
+4. 权限与设置来源梳理
+
+验证方式：
+
+1. 画图
+2. 写笔记
+3. 用“能否解释清楚边界”来验证
+
+### Level 2: 静态验证
+
+适用于：
+
+1. 类型设计
+2. 配置 Schema
+3. `mini-claude` 的接口边界
+
+验证方式：
+
+1. `tsc --noEmit`
+2. 小范围单元测试
+3. Schema 校验
+
+### Level 3: 运行验证
+
+适用于：
+
+1. query loop
+2. tool execution
+3. streaming
+4. compaction
+5. resume
+
+验证方式：
+
+1. `bun test`
+2. 本地演示命令
+3. 简化版集成链路
+
+## 本计划不再做的承诺
+
+以下承诺已被移除：
+
+1. 不再承诺每一步都有稳定的精确行号锚点
+2. 不再承诺每一步都能直接运行验证
+3. 不再承诺从 Phase 1 就同步镜像复刻目录结构
+4. 不再把自动生成 stub 当作核心学习入口
+
+## 一句话总结
+
+Claude Code 的真实学习单元不是“类型、配置、状态”这些静态切片，而是“消息如何沿着主数据流穿过系统并被不断重写、执行、压缩和持久化”。
